@@ -41,7 +41,8 @@ def is_admin(chat_id, user_id):
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
-        bot.reply_to(message, "سلام 👋 به ربات مدیریتی خوش آمدی!")
+        bot.reply_to(message, """Welcome To Moscow 🌙
+Developer : @rewhi 👑""")
 
 # پیام خوش‌آمد
 @bot.message_handler(content_types=['new_chat_members'])
@@ -133,8 +134,8 @@ def list_admins(message: Message):
         return
     admins = bot.get_chat_administrators(message.chat.id)
     names = [f"👮 {admin.user.first_name}" for admin in admins]
-    bot.reply_to(message, "لیست مدیران:
-" + "\n".join(names))
+    bot.reply_to(message, """لیست مدیران:
+""" + "\n".join(names))
 
 # راهنما
 @bot.message_handler(commands=['help'])
