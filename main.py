@@ -1,14 +1,15 @@
 import os
-from dotenv import load_dotenv
 from telebot import TeleBot
-from telebot.types import Message
 
-# Load environment variables
-load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Initialize bot
+print("DEBUG: TELEGRAM_BOT_TOKEN =", TELEGRAM_BOT_TOKEN)
+
+if TELEGRAM_BOT_TOKEN is None:
+    raise Exception("TELEGRAM_BOT_TOKEN is None! Set your environment variable correctly.")
+
 bot = TeleBot(token=TELEGRAM_BOT_TOKEN)
+
 
 # حافظه موقت برای نگهداری حالت ارسال پیام ناشناس
 anon_targets = {}
