@@ -15,13 +15,33 @@ if TELEGRAM_BOT_TOKEN is None or WEBHOOK_URL is None:
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
 app = Flask(__name__)
 
-ADMIN_PASSWORD = "1494"
+ADMIN_PASSWORD = "1111"
 custom_admins = set()
-FILTERED_WORDS = ["بد", "زشت"]
+FILTERED_WORDS = ["کص", "کوص", "ننت", "مادرت", "مامانت", "ننه", "جنده", "کونده", "کصده", "خارت", "خواهرتو", "کوس", "ابجیتو", "کونتو", "لینک"]
 JOKES = [
     "🤣 چرا کامپیوتر هیچ‌وقت گرسنه نیست؟ چون همیشه RAM داره!",
-    "😆 چرا برنامه‌نویس‌ها از طبیعت خوششون نمیاد؟ چون باگ زیاده!"
+    "😆 چرا برنامه‌نویس‌ها از طبیعت خوششون نمیاد؟ چون باگ زیاده!",
+    """‏به یکی گفتم: چقد خوشگلی!!
+
+گفت: چشات قشنگ میبینه.
+
+دو تا عکس که رفتم جلوتر دیدم راست میگفته بنده‌خدا""",
+    """حیف نون ﺑﺎﺑﺎﺵ ﻣﯿﻤﯿﺮﻩ
+
+ﺳﻮﻣﺶ ﺧﯿﻠﯽ ﺷﻠﻮﻍ ﻣﯿﺸﻪ، 
+
+😆 ﺑﻪ ﺩﺍﺩﺍﺷﺶ ﻣﯿﮕﻪ ﺍﮔﻪ ﻫﻔﺘﻢ ﻫﻢ ﺍﯾﻨﻘﺪ ﺷﻠﻮﻍ ﺷﺪ ﺑﻼﻝ ﺑﯿﺎﺭﯾﻢ ﺑﻔﺮﻭﺷﯿﻢ""",
+    """حیوون خوونگی فقط مورچه!!
+
+سر و صدا نمیکنه ،جیش نمی کنه، رسیدگی نمیخواد
+
+آروم خونه رو جارو میکنه
+
+گشنه هم بشه یه چیزی از رو فرش پیدا میکنه می خوره """
 ]
+
+# دیکشنری ذخیره اعضای هر گروه (کلید: chat_id، مقدار: set از user_id ها)
+group_users = {}
 
 # ==== Webhook ====
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
@@ -59,105 +79,133 @@ def start_handler(message: Message):
 def welcome_new_members(message: Message):
     for new_member in message.new_chat_members:
         try:
-            # گرفتن عکس پروفایل (حداقل سایز 1)
             photos = bot.get_user_profile_photos(new_member.id, limit=1)
             if photos.total_count > 0:
                 file_id = photos.photos[0][0].file_id
                 bot.send_photo(
                     message.chat.id,
                     photo=file_id,
-                    caption=f"🎉 خوش آمدی {mention_user(new_member)}!",
+                    caption=f"🤤 ممبر جدید {mention_user(new_member)}!",
                     parse_mode='Markdown'
                 )
             else:
-                bot.send_message(message.chat.id, f"🎉 خوش آمدی {mention_user(new_member)}!", parse_mode='Markdown')
+                bot.send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(new_member)}!", parse_mode='Markdown')
         except Exception as e:
             print(f"[ERROR] welcome_new_members: {e}")
-            bot.send_message(message.chat.id, f"🎉 خوش آمدی {mention_user(new_member)}!", parse_mode='Markdown')
+            bot.send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(new_member)}!", parse_mode='Markdown')
 
-# ==== هندلر پیام‌های گروه: فیلتر کلمات و دستورها ====
+# ==== هندلر پیام‌های گروه: فیلتر کلمات، دستورها، و ارسال پیام خصوصی ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
 def group_message_handler(message: Message):
-    print(f"[DEBUG] پیام گروهی از {message.from_user.id}: {message.text}")
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    text = message.text.strip()
+
+    print(f"[DEBUG] پیام گروهی از {user_id}: {text}")
+
+    # ثبت عضو در دیکشنری
+    users = group_users.setdefault(chat_id, set())
+    users.add(user_id)
 
     # فیلتر کلمات ممنوع
     for word in FILTERED_WORDS:
-        if word in message.text.lower():
+        if word in text.lower():
             try:
-                bot.delete_message(message.chat.id, message.message_id)
-                bot.send_message(message.chat.id, f"⚠️ {mention_user(message.from_user)} لطفاً از الفاظ مناسب استفاده کن.", parse_mode='Markdown')
+                bot.delete_message(chat_id, message.message_id)
+                bot.send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی ادبی نکن گوساله.", parse_mode='Markdown')
             except Exception:
                 pass
             return
 
-    # فقط ادمین‌ها اجازه اجرای دستور را دارند
-    if not is_admin(message.chat.id, message.from_user.id):
+    # فقط ادمین‌ها اجازه اجرای دستور را دارند (بجز مواردی که نیاز به ادمین نیست)
+    # دستور ارسال پیام خصوصی به اعضا
+    if text.lower().startswith("ارسال"):
+        if not is_admin(chat_id, user_id):
+            return
+        text_to_send = text[5:].strip()
+        if not text_to_send:
+            bot.reply_to(message, "❗ لطفاً متنی برای ارسال خصوصی وارد کنید.")
+            return
+        sent_count = 0
+        failed_count = 0
+        for uid in users:
+            try:
+                user_mention = f"[کاربر](tg://user?id={uid})"
+                bot.send_message(uid, f"پیام از گروه {message.chat.title}:\n\n{text_to_send}\n\n{user_mention}", parse_mode='Markdown')
+                sent_count += 1
+            except Exception:
+                failed_count += 1
+        bot.reply_to(message, f"✅ پیام به {sent_count} نفر ارسال شد.\n❌ ارسال به {failed_count} نفر موفق نبود.")
         return
 
-    text = message.text.strip().lower()
+    # دستورهای ادمین که ریپلای لازم دارند
+    if not is_admin(chat_id, user_id):
+        return
 
-    if text.startswith("ban") and message.reply_to_message:
+    lower_text = text.lower()
+
+    if lower_text.startswith("سیک") and message.reply_to_message:
         try:
-            bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} کاربر بن شد.", parse_mode='Markdown')
+            bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
+            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} سیک کاربر رو زدم.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text.startswith("unban") and message.reply_to_message:
+    elif lower_text.startswith("حذف سیک") and message.reply_to_message:
         try:
-            bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+            bot.unban_chat_member(chat_id, message.reply_to_message.from_user.id)
             bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} آزاد شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text.startswith("mute") and message.reply_to_message:
+    elif lower_text.startswith("خفه") and message.reply_to_message:
         try:
             bot.restrict_chat_member(
-                message.chat.id,
+                chat_id,
                 message.reply_to_message.from_user.id,
                 permissions=types.ChatPermissions(can_send_messages=False)
             )
-            bot.reply_to(message, f"🔇 {mention_user(message.reply_to_message.from_user)} کاربر ساکت شد.", parse_mode='Markdown')
+            bot.reply_to(message, f"🔇 {mention_user(message.reply_to_message.from_user)} کاربر خفه شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text.startswith("unmute") and message.reply_to_message:
+    elif lower_text.startswith("حذف خفه") and message.reply_to_message:
         try:
             bot.restrict_chat_member(
-                message.chat.id,
+                chat_id,
                 message.reply_to_message.from_user.id,
                 permissions=types.ChatPermissions(can_send_messages=True)
             )
-            bot.reply_to(message, f"🔊 {mention_user(message.reply_to_message.from_user)} لغو سکوت شد.", parse_mode='Markdown')
+            bot.reply_to(message, f"🔊 {mention_user(message.reply_to_message.from_user)} ازاد شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text.startswith("tempmute") and message.reply_to_message:
-        parts = text.split()
+    elif lower_text.startswith("خفه موقت") and message.reply_to_message:
+        parts = lower_text.split()
         if len(parts) == 2 and parts[1].isdigit():
             try:
                 duration = int(parts[1])
                 until = datetime.utcnow() + timedelta(seconds=duration)
                 bot.restrict_chat_member(
-                    message.chat.id,
+                    chat_id,
                     message.reply_to_message.from_user.id,
                     until_date=until,
                     permissions=types.ChatPermissions(can_send_messages=False)
                 )
-                bot.reply_to(message, f"⏱️ {mention_user(message.reply_to_message.from_user)} به مدت {duration} ثانیه ساکت شد.", parse_mode='Markdown')
+                bot.reply_to(message, f"⏱️ {mention_user(message.reply_to_message.from_user)} به مدت {duration} ثانیه خفه شد.", parse_mode='Markdown')
             except Exception as e:
                 bot.reply_to(message, f"❌ خطا: {e}")
         else:
             bot.reply_to(message, "❗ استفاده صحیح: tempmute [ثانیه] (با ریپلای)")
 
-    elif text.startswith("del") and message.reply_to_message:
-        parts = text.split()
+    elif lower_text.startswith("پاکسازی") and message.reply_to_message:
+        parts = lower_text.split()
         if len(parts) == 2 and parts[1].isdigit():
             count = int(parts[1])
             deleted = 0
             for i in range(count):
                 try:
-                    bot.delete_message(message.chat.id, message.reply_to_message.message_id + i)
+                    bot.delete_message(chat_id, message.reply_to_message.message_id + i)
                     deleted += 1
                 except Exception:
                     pass
@@ -165,55 +213,55 @@ def group_message_handler(message: Message):
         else:
             bot.reply_to(message, "❗ استفاده صحیح: del [تعداد] (با ریپلای)")
 
-    elif text == "lock":
+    elif lower_text == "قفل":
         try:
-            bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=False))
+            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
             bot.reply_to(message, "🔒 گروه قفل شد.")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text == "unlock":
+    elif lower_text == "باز کردن":
         try:
-            bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=True))
+            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
             bot.reply_to(message, "🔓 گروه باز شد.")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text.startswith("addadmin"):
-        parts = text.split()
+    elif lower_text.startswith("افزودن ادمین"):
+        parts = lower_text.split()
         if len(parts) == 2 and parts[1] == ADMIN_PASSWORD:
-            custom_admins.add(message.from_user.id)
-            bot.reply_to(message, "✅ شما به عنوان ادمین ثبت شدید.")
+            custom_admins.add(user_id)
+            bot.reply_to(message, "🥰 شما به عنوان ادمین ثبت شدید.")
         else:
             bot.reply_to(message, "❌ رمز نادرست است.")
 
-    elif text == "admins":
+    elif lower_text == "ادمین ها":
         try:
-            admins = bot.get_chat_administrators(message.chat.id)
+            admins = bot.get_chat_administrators(chat_id)
             names = [f"👮 {mention_user(admin.user)}" for admin in admins]
             bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names), parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif text == "joke":
+    elif lower_text == "جوک":
         bot.reply_to(message, random.choice(JOKES))
 
-    elif text == "help":
+    elif lower_text == "راهنما":
         bot.reply_to(message, """
 📖 راهنمای ربات:
 
-🔨 ban (با ریپلای) - بن کاربر  
-🔓 unban - آزاد کردن  
-🔇 mute - سکوت دائمی  
-⏱️ tempmute [ثانیه] - سکوت موقت  
-🔊 unmute - لغو سکوت  
-🗑️ del [تعداد] - حذف پیام‌ها  
-🔒 lock - قفل گروه  
-🔓 unlock - باز کردن  
-🎭 addadmin [رمز] - افزودن ادمین  
-📋 admins - لیست ادمین‌ها  
-🤣 joke - جوک  
-📌 help - نمایش راهنما
+🔨 **سیک** (با ریپلای) - بن کاربر  
+🔓 **حذف سیک** - آزاد کردن  
+🔇 **خفه** - سکوت دائمی  
+⏱️ **خفه موقت** [ثانیه] - سکوت موقت  
+🔊 **حذف خفه** - لغو سکوت  
+🗑️ **پاکسازی** [تعداد] - حذف پیام‌ها  
+🔒 **قفل** - قفل گروه  
+🔓 **باز کردن** - باز کردن  
+🎭 **افزودن ادمین** [رمز] - افزودن ادمین  
+📋 **ادمین ها** - لیست ادمین‌ها  
+🤣 **جوک** - جوک  
+📌 **راهنما** - نمایش راهنما
 """)
 
 # ==== اجرای برنامه ====
