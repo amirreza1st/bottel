@@ -242,16 +242,32 @@ def handle_group_message(message: Message):
     elif lower == "جوک":
         bot.reply_to(message, random.choice(JOKES))
 
-    # نمایش آمار گروه
-    elif lower == "امار":
-        s = group_stats.get(chat_id)
-        if not s:
-            bot.reply_to(message, "📊 آماری موجود نیست.")
-            return
-        reply = f"📊 آمار گروه:\n🔢 پیام‌ها: {s['messages']}\n"
-        for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True)[:5]:
-            reply += f"- [{uid}](tg://user?id={uid}): {count} پیام\n"
-        bot.reply_to(message, reply, parse_mode='Markdown')
+# نمایش آمار گروه
+elif lower == "امار":
+    s = group_stats.get(chat_id)
+    if not s:
+        bot.reply_to(message, "📊 آماری موجود نیست.")
+        return
+    reply = "📊 *آمار گروه:*\n\n"
+    reply += f"📝 تعداد کل پیام‌ها: *{s['messages']}*\n\n"
+    reply += "👥 *برترین ارسال‌کنندگان پیام:* \n"
+    for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True)[:5]:
+        try:
+            user = bot.get_chat_member(chat_id, uid).user
+            user_mention = f"[{user.first_name}](tg://user?id={user.id})"
+        except Exception:
+            # اگر مشکلی بود فقط آی‌دی را نشان بده
+            user_mention = f"`{uid}`"
+        reply += f"➤ {user_mention} — {count} پیام\n"
+
+    bot.reply_to(message, reply, parse_mode='Markdown')
+
+    # ارسال عکس در پایان پیام آمار (آدرس عکس را تغییر دهید به URL دلخواه)
+    image_url = "https://uploadkon.ir/uploads/96a601_25photo18968523702.jpg"
+    try:
+        bot.send_photo(chat_id, image_url)
+    except Exception as e:
+        print("[ERROR] send photo in stats:", e)
 
     # راهنما
     elif lower == "راهنما":
