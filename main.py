@@ -35,22 +35,25 @@ JOKES = [
 group_users = {}  # {chat_id: set(user_id)}
 group_stats = {}  # {chat_id: {'messages': int, 'users': {user_id: count}}}
 
-# عکس پایانی پیام‌ها
+# عکس پایانی پیام‌ها (استفاده فقط در استارت و راهنما)
 FINAL_IMAGE_URL = "https://uploadkon.ir/uploads/96a601_25photo18968523702.jpg"
 
 # ==== توابع کمکی ====
 
-def send_photo_with_caption(chat_id, text, reply_to_message_id=None, parse_mode='Markdown'):
-    try:
-        msg = bot.send_photo(chat_id, photo=FINAL_IMAGE_URL, caption=text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
-        return msg
-    except Exception as e:
-        print("[ERROR] send photo with caption:", e)
-        # اگر عکس ارسال نشد، فقط متن را بفرست
-        return bot.send_message(chat_id, text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
+def send_message(chat_id, text, reply_to_message_id=None, parse_mode='Markdown'):
+    # فقط پیام متنی ارسال کن
+    return bot.send_message(chat_id, text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
 
-def send_reply_photo_with_caption(message, text, parse_mode='Markdown'):
-    return send_photo_with_caption(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=parse_mode)
+def send_message_with_image(chat_id, text, reply_to_message_id=None, parse_mode='Markdown'):
+    # ارسال متن + عکس (برای استارت و راهنما)
+    msg = bot.send_photo(chat_id, FINAL_IMAGE_URL, caption=text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
+    return msg
+
+def send_reply_with_image(message, text, parse_mode='Markdown'):
+    return send_message_with_image(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=parse_mode)
+
+def send_reply(message, text, parse_mode='Markdown'):
+    return send_message(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=parse_mode)
 
 def is_admin(chat_id, user_id):
     try:
@@ -79,7 +82,12 @@ def index():
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
-        send_reply_photo_with_caption(message, "Welcome To Moscow 🌙\nDeveloper : @rewhi 👑")
+        text = (
+            "🌙 *Welcome To Moscow Night* 🌙\n\n"
+            "👑 Developer : @rewhi\n\n"
+            "برای شروع از دستورات گروه استفاده کنید."
+        )
+        send_reply_with_image(message, text)
 
 # ==== خوش‌آمدگویی ====
 @bot.message_handler(content_types=['new_chat_members'])
@@ -95,7 +103,7 @@ def welcome(message: Message):
                     parse_mode='Markdown'
                 )
             else:
-                send_photo_with_caption(message.chat.id, f"🤤 ممبر جدید {mention_user(member)}!", parse_mode='Markdown')
+                send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(member)}!", parse_mode='Markdown')
         except Exception as e:
             print("[ERROR] welcome:", e)
 
@@ -117,7 +125,7 @@ def handle_group_message(message: Message):
     if any(w in lower for w in FILTERED_WORDS):
         try:
             bot.delete_message(chat_id, message.message_id)
-            send_photo_with_caption(chat_id, f"⚠️ {mention_user(message.from_user)} بی‌ادبی نکن!", parse_mode='Markdown')
+            send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی‌ادبی نکن!", parse_mode='Markdown')
         except Exception as e:
             print("[ERROR] filter:", e)
         return
@@ -129,68 +137,69 @@ def handle_group_message(message: Message):
     if lower.startswith("ارسال"):
         msg = text[5:].strip()
         if not msg:
-            send_reply_photo_with_caption(message, "❗ لطفاً متنی بنویس.")
+            send_reply(message, "❗ لطفاً متنی بنویس.")
             return
         success, fail = 0, 0
         for uid in group_users[chat_id]:
             try:
                 bot.send_message(uid, f"""👑 پیام از {message.chat.title}:\n\n{msg}""")
+                # ارسال عکس حذف شد
                 success += 1
             except Exception:
                 fail += 1
-        send_reply_photo_with_caption(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
+        send_reply(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
 
     elif lower.startswith("سیک") and message.reply_to_message:
         try:
             bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
-            send_reply_photo_with_caption(message, f"✅ {mention_user(message.reply_to_message.from_user)} بن شد.")
+            send_reply(message, f"✅ {mention_user(message.reply_to_message.from_user)} بن شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower.startswith("حذف سیک") and message.reply_to_message:
         try:
             bot.unban_chat_member(chat_id, message.reply_to_message.from_user.id)
-            send_reply_photo_with_caption(message, "✅ آزاد شد.")
+            send_reply(message, "✅ آزاد شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
-    elif lower.startswith("خفه") and message.reply_to_message and lower == "خفه":
+    elif lower == "خفه" and message.reply_to_message:
         try:
             bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=False))
-            send_reply_photo_with_caption(message, "🔇 خفه شد.")
+            send_reply(message, "🔇 خفه شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
-    elif lower.startswith("حذف خفه") and message.reply_to_message:
+    elif lower == "حذف خفه" and message.reply_to_message:
         try:
             bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=True))
-            send_reply_photo_with_caption(message, "🔊 آزاد شد.")
+            send_reply(message, "🔊 آزاد شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower.startswith("خفه موقت") and message.reply_to_message:
         try:
             parts = lower.split()
             if len(parts) < 3:
-                send_reply_photo_with_caption(message, "❗ استفاده صحیح: خفه موقت [ثانیه] (ریپلی روی پیام)")
+                send_reply(message, "❗ استفاده صحیح: خفه موقت [ثانیه] (ریپلی روی پیام)")
                 return
             duration = int(parts[2])
             until = datetime.utcnow() + timedelta(seconds=duration)
             bot.restrict_chat_member(
-                chat_id, 
-                message.reply_to_message.from_user.id, 
+                chat_id,
+                message.reply_to_message.from_user.id,
                 until_date=until,
                 permissions=types.ChatPermissions(can_send_messages=False)
             )
-            send_reply_photo_with_caption(message, f"⏱️ خفه موقت شد ({duration} ثانیه)")
+            send_reply(message, f"⏱️ خفه موقت شد ({duration} ثانیه)")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower.startswith("پاکسازی"):
         try:
             parts = lower.split()
             if len(parts) < 2 or not parts[1].isdigit():
-                send_reply_photo_with_caption(message, "❗ استفاده صحیح: پاکسازی [تعداد]")
+                send_reply(message, "❗ استفاده صحیح: پاکسازی [تعداد]")
                 return
             count = int(parts[1])
             for i in range(count):
@@ -198,51 +207,54 @@ def handle_group_message(message: Message):
                     bot.delete_message(chat_id, message.message_id - i)
                 except:
                     pass
-            send_reply_photo_with_caption(message, f"🗑️ {count} پیام حذف شد.")
+            send_reply(message, f"🗑️ {count} پیام حذف شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower == "قفل":
         try:
             bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
-            send_reply_photo_with_caption(message, "🔒 گروه قفل شد.")
+            send_reply(message, "🔒 گروه قفل شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower == "باز کردن":
         try:
             bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
-            send_reply_photo_with_caption(message, "🔓 گروه باز شد.")
+            send_reply(message, "🔓 گروه باز شد.")
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower.startswith("افزودن ادمین"):
         parts = lower.split()
         if len(parts) >= 3 and parts[-1] == ADMIN_PASSWORD:
             custom_admins.add(user_id)
-            send_reply_photo_with_caption(message, "👮 ادمین شدی.")
+            send_reply(message, "👮 ادمین شدی.")
         else:
-            send_reply_photo_with_caption(message, "❌ رمز نادرست است.")
+            send_reply(message, "❌ رمز نادرست است.")
 
     elif lower == "ادمین ها":
         try:
             admins = bot.get_chat_administrators(chat_id)
             reply = "\n".join([f"👮 {mention_user(a.user)}" for a in admins])
-            send_reply_photo_with_caption(message, reply)
+            send_reply(message, reply)
         except Exception as e:
-            send_reply_photo_with_caption(message, f"❌ خطا: {e}")
+            send_reply(message, f"❌ خطا: {e}")
 
     elif lower == "جوک":
-        send_reply_photo_with_caption(message, random.choice(JOKES))
+        send_reply(message, random.choice(JOKES))
 
     elif lower == "امار":
         s = group_stats.get(chat_id)
         if not s:
-            send_reply_photo_with_caption(message, "📊 آماری موجود نیست.")
+            send_reply(message, "📊 آماری موجود نیست.")
             return
-        reply = "📊 *آمار گروه:*\n\n"
-        reply += f"📝 تعداد کل پیام‌ها: *{s['messages']}*\n\n"
-        reply += "👥 *برترین ارسال‌کنندگان پیام:* \n"
+        reply = (
+            "📊 *آمار گروه:*\n\n"
+
+            f"📝 تعداد کل پیام‌ها: *{s['messages']}*\n\n"
+            "👥 *برترین ارسال‌کنندگان پیام:* \n"
+        )
         for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True)[:5]:
             try:
                 user = bot.get_chat_member(chat_id, uid).user
@@ -251,11 +263,11 @@ def handle_group_message(message: Message):
                 user_mention = f"`{uid}`"
             reply += f"➤ {user_mention} — {count} پیام\n"
 
-        send_reply_photo_with_caption(message, reply)
+        send_reply(message, reply)
 
     elif lower == "راهنما":
-        send_reply_photo_with_caption(message, """
-✨ راهنمای کاربر :
+        help_text = """
+✨ *راهنمای کاربر :*
 
 🚫 سیک - بن کاربر (ریپلی روی پیام)
 ♻️ حذف سیک - آزاد کردن کاربر (ریپلی روی پیام)
@@ -271,8 +283,9 @@ def handle_group_message(message: Message):
 📊 امار - نمایش آمار گروه
 🔰 راهنما - نمایش این پیام
 
-⚜ اختصاصی تیم **Moscow Nights**
-        """)
+⚜ اختصاصی تیم *Moscow Nights*
+        """
+        send_reply_with_image(message, help_text.strip())
 
 # ==== اجرای ربات ====
 if __name__ == '__main__':
