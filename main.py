@@ -5,7 +5,7 @@ from telebot.types import Message
 
 # Load environment variables
 load_dotenv()
-TELEGRAM_BOT_TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Initialize bot
 bot = TeleBot(token=TELEGRAM_BOT_TOKEN)
