@@ -105,21 +105,22 @@ def handle_group_message(message: Message):
 
     lower = text.lower()
 
-    if lower.startswith("ارسال"):
-        msg = text[5:].strip()
-        if not msg:
-            bot.reply_to(message, "❗ لطفاً متنی بنویس.")
-            return
-        success, fail = 0, 0
-        for uid in group_users[chat_id]:
-            try:
-                bot.send_message(uid, f"📩 پیام از {message.chat.title"}:
+if lower.startswith("ارسال"):
+    msg = text[5:].strip()
+    if not msg:
+        bot.reply_to(message, "❗ لطفاً متنی بنویس.")
+        return
+    success, fail = 0, 0
+    for uid in group_users[chat_id]:
+        try:
+            bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
 
-{msg}", parse_mode='Markdown')
-                success += 1
-            except:
-                fail += 1
-        bot.reply_to(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
+{msg}""", parse_mode='None')
+            success += 1
+        except:
+            fail += 1
+    bot.reply_to(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
+
 
     elif lower.startswith("سیک") and message.reply_to_message:
         try:
@@ -193,7 +194,7 @@ def handle_group_message(message: Message):
     elif lower == "جوک":
         bot.reply_to(message, random.choice(JOKES))
 
-    elif lower == "آمار":
+    elif lower == "امار":
         s = group_stats.get(chat_id)
         if not s:
             bot.reply_to(message, "📊 آماری موجود نیست.")
