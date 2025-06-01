@@ -161,12 +161,5 @@ def help_handler(message: Message):
 def joke_handler(message: Message):
     bot.reply_to(message, random.choice(JOKES))
 
-
-
-@bot.message_handler(func=lambda message: True)
-def test_all_messages(message: Message):
-    print(f"[DEBUG] Received message in chat {message.chat.id}: {message.text}")
-    bot.reply_to(message, "✅ پیام شما دریافت شد.")
-
 # شروع بی‌نهایت
 bot.infinity_polling()
