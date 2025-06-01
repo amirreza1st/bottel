@@ -169,17 +169,18 @@ def handle_group(message: Message):
     if not is_admin(chat_id, user_id):
         return
 
-    if lower.startswith("ارسال"):
-        msg = text[5:].strip()
-        success, fail = 0, 0
-        for uid in group_users[chat_id]:
-            try:
-                bot.send_message(uid, f"👑 پیام از {message.chat.title}:
-{msg}")
-                success += 1
-            except:
-                fail += 1
-        send_reply(message, f"""✅ ارسال: {success}
+if lower.startswith("ارسال"):
+    msg = text[5:].strip()
+    success, fail = 0, 0
+    for uid in group_users[chat_id]:
+        try:
+            bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
+
+{msg}""")
+            success += 1
+        except:
+            fail += 1
+    send_reply(message, f"""✅ ارسال: {success}
 ❌ شکست: {fail}""")
 
     elif lower.startswith("سیک") and message.reply_to_message:
