@@ -246,6 +246,50 @@ def group_message_handler(message: Message):
     elif lower_text == "جوک":
         bot.reply_to(message, random.choice(JOKES))
 
+    if lower_text == "آمار":
+        stats = group_stats.get(chat_id)
+        if not stats:
+            bot.reply_to(message, "📊 هنوز آماری برای این گروه ثبت نشده است.")
+            return
+        total_messages = stats["messages"]
+        top_users = sorted(stats["users"].items(), key=lambda x: x[1], reverse=True)[:5]
+        report = f"📊 **آمار فعالیت امروز گروه:**\n\n🔢 کل پیام‌ها: {total_messages}\n👥 فعال‌ترین کاربران:\n"
+        for user_id, count in top_users:
+            report += f"- [{user_id}](tg://user?id={user_id}): {count} پیام\n"
+        bot.reply_to(message, report, parse_mode='Markdown')
+        return
+
+    if lower_text == "نرخ ارز":
+        try:
+            # نرخ ارز
+            exchange_data = requests.get("https://api.exchangerate-api.com/v4/latest/USD").json()
+            eur = exchange_data["rates"].get("EUR")
+            gbp = exchange_data["rates"].get("GBP")
+
+            # بیت‌کوین به تومان
+            btc_data = requests.get("https://api.coindesk.com/v1/bpi/currentprice/IRR.json").json()
+            btc_price = btc_data["bpi"]["IRR"]["rate"].replace(",", "")
+            btc_price = f"{int(float(btc_price)):,}"
+
+            # قیمت طلا (گرم ۱۸ عیار)
+            gold_data = requests.get("https://api.nobitex.ir/market/stats").json()
+            gold_price = gold_data["stats"]["gold18"]["last"]
+            gold_price = f"{int(float(gold_price)):,}"
+
+            report = (
+                "**📊 نرخ لحظه‌ای بازار:**\n\n"
+                "💵 **دلار آمریکا:** `1 USD`\n"
+                f"🇪🇺 **یورو:** `{eur:.2f} EUR`\n"
+                f"🇬🇧 **پوند:** `{gbp:.2f} GBP`\n\n"
+                f"🟡 **طلای ۱۸ عیار:** `{gold_price} تومان`\n"
+                f"🪙 **بیت‌کوین:** `{btc_price} تومان`\n"
+            )
+            bot.reply_to(message, report, parse_mode="Markdown")
+        except Exception as e:
+            print("❌ خطا در دریافت اطلاعات:", e)
+            bot.reply_to(message, "❌ خطا در دریافت اطلاعات بازار.")
+        return
+
     elif lower_text == "راهنما":
         bot.reply_to(message, """
 📖 راهنمای ربات:
@@ -262,7 +306,7 @@ def group_message_handler(message: Message):
 📋 **ادمین ها** - لیست ادمین‌ها  
 🤣 **جوک** - جوک  
 📌 **راهنما** - نمایش راهنما
-""")
+""", parse_mode='Markdown')
 
 # ==== اجرای برنامه ====
 if __name__ == "__main__":
