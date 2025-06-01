@@ -161,8 +161,8 @@ def handle_group(message: Message):
                 InlineKeyboardButton("✅ تایید", callback_data=f"accept_{rep.message_id}"),
                 InlineKeyboardButton("❌ رد", callback_data=f"reject_{rep.message_id}")
             )
-            bot.send_message(chat_id, f"گزارش برای {mention_user(rep.from_user)}:
-{rep.text}", reply_markup=kb, parse_mode="Markdown")
+            bot.send_message(chat_id, f"""گزارش برای {mention_user(rep.from_user)}:
+{rep.text}""", reply_markup=kb, parse_mode="Markdown")
         REPORTS[chat_id] = []
         return
 
