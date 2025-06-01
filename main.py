@@ -40,16 +40,22 @@ def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
         return any(admin.user.id == user_id for admin in admins) or user_id in custom_admins
-    except:
+    except Exception:
         return False
 
-# ==== خوش‌آمدگویی ====
+# ==== هندلر دستور /start (فقط چت خصوصی) ====
+@bot.message_handler(commands=['start'])
+def start_handler(message: Message):
+    if message.chat.type == 'private':
+        bot.reply_to(message, "Welcome To Moscow 🌙\nDeveloper : @rewhi 👑")
+
+# ==== خوش‌آمدگویی به اعضای جدید ====
 @bot.message_handler(content_types=['new_chat_members'])
 def welcome_new_members(message: Message):
     for new_member in message.new_chat_members:
         bot.send_message(message.chat.id, f"🎉 {new_member.first_name} خوش آمدی!")
 
-# ==== فیلتر کلمات ممنوع ====
+# ==== فیلتر کلمات ممنوع در گروه‌ها ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
 def filter_messages(message: Message):
     for word in FILTERED_WORDS:
@@ -57,45 +63,62 @@ def filter_messages(message: Message):
             try:
                 bot.delete_message(message.chat.id, message.message_id)
                 bot.send_message(message.chat.id, f"⚠️ {message.from_user.first_name} لطفاً از الفاظ مناسب استفاده کن.")
-            except:
+            except Exception:
                 pass
             return
 
-# ==== دستورات متنی مدیریت گروه ====
+# ==== هندلر دستورات مدیریتی در گروه (بدون نیاز به اسلش /) ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
 def command_handler(message: Message):
+    # فقط ادمین‌ها و مدیران می‌توانند دستور اجرا کنند
     if not is_admin(message.chat.id, message.from_user.id):
         return
 
     text = message.text.strip().lower()
 
+    # فرمان‌ها:
     if text.startswith("ban") and message.reply_to_message:
-        bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-        bot.reply_to(message, "✅ کاربر بن شد.")
+        try:
+            bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+            bot.reply_to(message, "✅ کاربر بن شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("unban") and message.reply_to_message:
-        bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-        bot.reply_to(message, "✅ کاربر آزاد شد.")
+        try:
+            bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+            bot.reply_to(message, "✅ کاربر آزاد شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("mute") and message.reply_to_message:
-        bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                 permissions=types.ChatPermissions(can_send_messages=False))
-        bot.reply_to(message, "🔇 کاربر ساکت شد.")
+        try:
+            bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
+                                     permissions=types.ChatPermissions(can_send_messages=False))
+            bot.reply_to(message, "🔇 کاربر ساکت شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("unmute") and message.reply_to_message:
-        bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                 permissions=types.ChatPermissions(can_send_messages=True))
-        bot.reply_to(message, "🔊 کاربر آزاد شد.")
+        try:
+            bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
+                                     permissions=types.ChatPermissions(can_send_messages=True))
+            bot.reply_to(message, "🔊 کاربر آزاد شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("tempmute") and message.reply_to_message:
         parts = text.split()
         if len(parts) == 2 and parts[1].isdigit():
-            duration = int(parts[1])
-            until = datetime.utcnow() + timedelta(seconds=duration)
-            bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                     until_date=until,
-                                     permissions=types.ChatPermissions(can_send_messages=False))
-            bot.reply_to(message, f"⏱️ کاربر به مدت {duration} ثانیه ساکت شد.")
+            try:
+                duration = int(parts[1])
+                until = datetime.utcnow() + timedelta(seconds=duration)
+                bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
+                                         until_date=until,
+                                         permissions=types.ChatPermissions(can_send_messages=False))
+                bot.reply_to(message, f"⏱️ کاربر به مدت {duration} ثانیه ساکت شد.")
+            except Exception as e:
+                bot.reply_to(message, f"❌ خطا: {e}")
         else:
             bot.reply_to(message, "❗ استفاده صحیح: tempmute [ثانیه] (با ریپلای)")
 
@@ -103,22 +126,30 @@ def command_handler(message: Message):
         parts = text.split()
         if len(parts) == 2 and parts[1].isdigit():
             count = int(parts[1])
+            deleted = 0
             for i in range(count):
                 try:
                     bot.delete_message(message.chat.id, message.reply_to_message.message_id + i)
-                except:
+                    deleted += 1
+                except Exception:
                     pass
-            bot.reply_to(message, f"🗑️ {count} پیام حذف شد.")
+            bot.reply_to(message, f"🗑️ {deleted} پیام حذف شد.")
         else:
             bot.reply_to(message, "❗ استفاده صحیح: del [تعداد] (با ریپلای)")
 
     elif text == "lock":
-        bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=False))
-        bot.reply_to(message, "🔒 گروه قفل شد.")
+        try:
+            bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=False))
+            bot.reply_to(message, "🔒 گروه قفل شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text == "unlock":
-        bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=True))
-        bot.reply_to(message, "🔓 گروه باز شد.")
+        try:
+            bot.set_chat_permissions(message.chat.id, types.ChatPermissions(can_send_messages=True))
+            bot.reply_to(message, "🔓 گروه باز شد.")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("addadmin"):
         parts = text.split()
@@ -129,9 +160,12 @@ def command_handler(message: Message):
             bot.reply_to(message, "❌ رمز نادرست است.")
 
     elif text == "admins":
-        admins = bot.get_chat_administrators(message.chat.id)
-        names = [f"👮 {admin.user.first_name}" for admin in admins]
-        bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names))
+        try:
+            admins = bot.get_chat_administrators(message.chat.id)
+            names = [f"👮 {admin.user.first_name}" for admin in admins]
+            bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names))
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text == "joke":
         bot.reply_to(message, random.choice(JOKES))
