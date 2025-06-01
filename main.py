@@ -1,3 +1,16 @@
+import os
+from telebot import TeleBot
+from telebot.types import Message
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+print("DEBUG: TELEGRAM_BOT_TOKEN =", TELEGRAM_BOT_TOKEN)
+
+if TELEGRAM_BOT_TOKEN is None:
+    raise Exception("TELEGRAM_BOT_TOKEN is None! Set your environment variable correctly.")
+
+bot = TeleBot(token=TELEGRAM_BOT_TOKEN)
+
 # لیست کلمات فیلتر شده
 FILTERED_WORDS = ["بد", "زشت", "نفرت"]  # نمونه کلمات فیلتر شده
 
@@ -196,6 +209,8 @@ def promote_user(message: Message):
     except Exception as e:
         bot.send_message(message.chat.id, f"خطا: {e}")
 
+
+bot.infinity_polling()
 
 
 bot.infinity_polling()
