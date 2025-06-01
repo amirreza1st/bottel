@@ -147,6 +147,13 @@ def help_handler(message: Message):
 """
     bot.reply_to(message, help_text)
 
+
+@bot.message_handler(func=lambda m: True)
+def echo_test(message):
+    bot.reply_to(message, "پیام دریافت شد!")
+
+
+
 @bot.message_handler(commands=['joke'])
 def joke_handler(message: Message):
     bot.reply_to(message, random.choice(JOKES))
