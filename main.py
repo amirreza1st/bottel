@@ -1,5 +1,4 @@
 import os
-import json
 import random
 from datetime import datetime, timedelta
 from flask import Flask, request
@@ -47,12 +46,13 @@ def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
         return user_id in custom_admins or any(admin.user.id == user_id for admin in admins)
-    except:
+    except Exception:
         return False
 
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def webhook():
-    update = types.Update.de_json(request.get_data().decode("utf-8"))
+    json_str = request.get_data().decode("utf-8")
+    update = types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "OK", 200
 
@@ -106,7 +106,7 @@ def command_handler(message: Message):
             key, val = pair.split("=", 1)
             custom_commands[key.strip()] = val.strip()
             send_reply(message, f"✅ دستور جدید افزوده شد: {key.strip()}")
-        except:
+        except Exception:
             send_reply(message, "❗ فرمت صحیح: /newcommand دستور = پاسخ")
     elif message.text.startswith("/deletecommand"):
         try:
@@ -116,7 +116,7 @@ def command_handler(message: Message):
                 send_reply(message, f"❌ حذف شد: {key.strip()}")
             else:
                 send_reply(message, "❗ چنین دستوری وجود ندارد.")
-        except:
+        except Exception:
             send_reply(message, "❗ فرمت صحیح: /deletecommand دستور")
 
 @bot.message_handler(content_types=['new_chat_members'])
@@ -130,26 +130,35 @@ def handle_group(message: Message):
     chat_id = message.chat.id
     text = message.text.strip() if message.text else ""
 
+    # آمار پیام‌ها و کاربران فعال
     stats = group_stats.setdefault(chat_id, {'messages': 0, 'users': {}})
     stats['messages'] += 1
     stats['users'][user_id] = stats['users'].get(user_id, 0) + 1
     group_users.setdefault(chat_id, set()).add(user_id)
 
     lower = text.lower()
+
+    # فیلتر کلمات رکیک
     if any(w in lower for w in FILTERED_WORDS):
-        bot.delete_message(chat_id, message.message_id)
+        try:
+            bot.delete_message(chat_id, message.message_id)
+        except Exception:
+            pass
         send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی‌ادبی نکن!", parse_mode='Markdown')
         return
 
+    # دستورهای سفارشی
     if text in custom_commands:
         send_reply(message, custom_commands[text])
         return
 
+    # ثبت گزارش
     if text == "گزارش" and message.reply_to_message:
         REPORTS.setdefault(chat_id, []).append(message.reply_to_message)
         send_reply(message, "📩 گزارش ثبت شد. منتظر بررسی ادمین باشید.")
         return
 
+    # بررسی گزارش‌ها توسط ادمین‌ها
     if text == "بررسی گزارش‌ها" and is_admin(chat_id, user_id):
         reports = REPORTS.get(chat_id, [])
         if not reports:
@@ -166,46 +175,61 @@ def handle_group(message: Message):
         REPORTS[chat_id] = []
         return
 
+    # فقط ادمین‌ها مجاز به دستورات زیر هستند
     if not is_admin(chat_id, user_id):
         return
 
-if lower.startswith("ارسال"):
-    msg = text[5:].strip()
-    success, fail = 0, 0
-    for uid in group_users[chat_id]:
-        try:
-            bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
+    # دستورات ادمینی
+    if lower.startswith("ارسال "):
+        msg = text[5:].strip()
+        success, fail = 0, 0
+        for uid in group_users.get(chat_id, []):
+            try:
+                bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
 
 {msg}""")
-            success += 1
-        except:
-            fail += 1
-    send_reply(message, f"""✅ ارسال: {success}
+                success += 1
+            except Exception:
+                fail += 1
+        send_reply(message, f"""✅ ارسال: {success}
 ❌ شکست: {fail}""")
 
     elif lower.startswith("سیک") and message.reply_to_message:
-        bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
-        send_reply(message, f"✅ {mention_user(message.reply_to_message.from_user)} بن شد.")
+        try:
+            bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
+            send_reply(message, f"✅ {mention_user(message.reply_to_message.from_user)} بن شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در بن کردن کاربر.")
 
     elif lower.startswith("حذف سیک") and message.reply_to_message:
-        bot.unban_chat_member(chat_id, message.reply_to_message.from_user.id)
-        send_reply(message, "✅ آزاد شد.")
+        try:
+            bot.unban_chat_member(chat_id, message.reply_to_message.from_user.id)
+            send_reply(message, "✅ آزاد شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در آزاد کردن کاربر.")
 
     elif lower == "خفه" and message.reply_to_message:
-        bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=False))
-        send_reply(message, "🔇 خفه شد.")
+        try:
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, permissions=types.ChatPermissions(can_send_messages=False))
+            send_reply(message, "🔇 خفه شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در سکوت دائم.")
 
     elif lower == "حذف خفه" and message.reply_to_message:
-        bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=True))
-        send_reply(message, "🔊 آزاد شد.")
+        try:
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, permissions=types.ChatPermissions(can_send_messages=True))
+            send_reply(message, "🔊 آزاد شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در لغو سکوت.")
 
     elif lower.startswith("خفه موقت") and message.reply_to_message:
         try:
-            duration = int(lower.split()[2])
+            parts = lower.split()
+            duration = int(parts[2])
             until = datetime.utcnow() + timedelta(seconds=duration)
-            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, until, types.ChatPermissions(can_send_messages=False))
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, until_date=until, permissions=types.ChatPermissions(can_send_messages=False))
             send_reply(message, f"⏱️ خفه موقت شد ({duration} ثانیه)")
-        except:
+        except Exception:
             send_reply(message, "❗ فرمت صحیح: خفه موقت [ثانیه]")
 
     elif lower.startswith("پاکسازی"):
@@ -214,16 +238,22 @@ if lower.startswith("ارسال"):
             for i in range(count):
                 bot.delete_message(chat_id, message.message_id - i)
             send_reply(message, f"🗑️ {count} پیام حذف شد.")
-        except:
+        except Exception:
             send_reply(message, "❗ فرمت صحیح: پاکسازی [تعداد]")
 
     elif lower == "قفل":
-        bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
-        send_reply(message, "🔒 گروه قفل شد.")
+        try:
+            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
+            send_reply(message, "🔒 گروه قفل شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در قفل کردن گروه.")
 
     elif lower == "باز کردن":
-        bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
-        send_reply(message, "🔓 گروه باز شد.")
+        try:
+            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
+            send_reply(message, "🔓 گروه باز شد.")
+        except Exception:
+            send_reply(message, "❗ خطا در باز کردن گروه.")
 
     elif lower.startswith("افزودن ادمین"):
         if lower.split()[-1] == ADMIN_PASSWORD:
@@ -233,9 +263,12 @@ if lower.startswith("ارسال"):
             send_reply(message, "❌ رمز نادرست است.")
 
     elif lower == "ادمین ها":
-        admins = bot.get_chat_administrators(chat_id)
-        msg = "\n".join(f"👮 {mention_user(a.user)}" for a in admins)
-        send_reply(message, msg)
+        try:
+            admins = bot.get_chat_administrators(chat_id)
+            msg = "\n".join(f"👮 {mention_user(a.user)}" for a in admins)
+            send_reply(message, msg)
+        except Exception:
+            send_reply(message, "❗ خطا در دریافت لیست ادمین‌ها.")
 
     elif lower == "جوک":
         send_reply(message, random.choice(JOKES))
@@ -251,4 +284,32 @@ if lower.startswith("ارسال"):
 
 👥 کاربران فعال:
 """
-        for uid, count in sorted(s['users'].items(), key=lambda x:
+        for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True):
+            reply += f"- [{uid}](tg://user?id={uid}): {count} پیام\n"
+        send_reply(message, reply)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("accept_") or call.data.startswith("reject_"))
+def callback_report_handler(call):
+    try:
+        action, msg_id = call.data.split("_", 1)
+        chat_id = call.message.chat.id
+        # فقط ادمین‌ها می‌توانند این کار را انجام دهند
+        if not is_admin(chat_id, call.from_user.id):
+            bot.answer_callback_query(call.id, "⛔ فقط ادمین‌ها مجاز هستند.")
+            return
+
+        # حذف پیام گزارش‌شده یا انجام اقدامات لازم
+        msg_id = int(msg_id)
+        if action == "accept":
+            bot.delete_message(chat_id, msg_id)
+            bot.answer_callback_query(call.id, "✅ پیام حذف شد.")
+        elif action == "reject":
+            bot.answer_callback_query(call.id, "❌ رد شد.")
+    except Exception:
+        bot.answer_callback_query(call.id, "❗ خطا در پردازش گزارش.")
+
+if __name__ == "__main__":
+    # تنظیم webhook
+    bot.remove_webhook()
+    bot.set_webhook(url=WEBHOOK_URL + "/" + TELEGRAM_BOT_TOKEN)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
