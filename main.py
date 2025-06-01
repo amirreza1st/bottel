@@ -174,14 +174,13 @@ def handle_group(message: Message):
         success, fail = 0, 0
         for uid in group_users[chat_id]:
             try:
-                bot.send_message(uid, f"👑 پیام از {message.chat.title}:
-
-{msg}")
+                bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
+{msg}""")
                 success += 1
             except:
                 fail += 1
-        send_reply(message, f"✅ ارسال: {success}
-❌ شکست: {fail}")
+        send_reply(message, f"""✅ ارسال: {success}
+❌ شکست: {fail}""")
 
     elif lower.startswith("سیک") and message.reply_to_message:
         bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
@@ -234,8 +233,7 @@ def handle_group(message: Message):
 
     elif lower == "ادمین ها":
         admins = bot.get_chat_administrators(chat_id)
-        msg = "
-".join(f"👮 {mention_user(a.user)}" for a in admins)
+        msg = "\n".join(f"👮 {mention_user(a.user)}" for a in admins)
         send_reply(message, msg)
 
     elif lower == "جوک":
@@ -246,35 +244,10 @@ def handle_group(message: Message):
         if not s:
             send_reply(message, "📊 آماری نیست.")
             return
-        reply = f"📊 *آمار گروه:*
+        reply = f"""📊 *آمار گروه:*
 
 📝 پیام‌ها: *{s['messages']}*
 
 👥 کاربران فعال:
-"
-        for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True)[:5]:
-            try:
-                user = bot.get_chat_member(chat_id, uid).user
-                reply += f"➤ [{user.first_name}](tg://user?id={user.id}) — {count} پیام
-"
-            except:
-                pass
-        send_reply(message, reply)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("accept_") or call.data.startswith("reject_"))
-def handle_report_action(call):
-    action, msg_id = call.data.split("_")
-    msg_id = int(msg_id)
-    try:
-        if action == "accept_":
-            bot.delete_message(call.message.chat.id, msg_id)
-            bot.edit_message_text("✅ پیام حذف شد.", call.message.chat.id, call.message.message_id)
-        else:
-            bot.edit_message_text("❌ گزارش رد شد.", call.message.chat.id, call.message.message_id)
-    except:
-        pass
-
-if __name__ == '__main__':
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+"""
+        for uid, count in sorted(s['users'].items(), key=lambda x:
