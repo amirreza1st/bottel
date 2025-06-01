@@ -174,8 +174,8 @@ def handle_group(message: Message):
         success, fail = 0, 0
         for uid in group_users[chat_id]:
             try:
-                bot.send_message(uid, f"""👑 پیام از {message.chat.title}:
-{msg}""")
+                bot.send_message(uid, f"👑 پیام از {message.chat.title}:
+{msg}")
                 success += 1
             except:
                 fail += 1
