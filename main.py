@@ -5,7 +5,6 @@ from flask import Flask, request
 from telebot import TeleBot, types
 from telebot.types import Message
 
-# ==== تنظیمات اولیه ====
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
@@ -15,7 +14,6 @@ if not TELEGRAM_BOT_TOKEN or not WEBHOOK_URL:
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
 app = Flask(__name__)
 
-# ==== داده‌ها و پیکربندی ====
 ADMIN_PASSWORD = "1111"
 custom_admins = set()
 FILTERED_WORDS = [
@@ -32,22 +30,16 @@ JOKES = [
     "حیوون خوونگی فقط مورچه!! سر و صدا نمیکنه، جیش نمی‌کنه، رسیدگی نمی‌خواد، آروم خونه رو جارو می‌کنه، گشنه هم بشه یه چیزی از رو فرش پیدا می‌کنه می‌خوره"
 ]
 
-group_users = {}  # {chat_id: set(user_id)}
-group_stats = {}  # {chat_id: {'messages': int, 'users': {user_id: count}}}
+group_users = {}
+group_stats = {}
 
-# عکس پایانی پیام‌ها (استفاده فقط در استارت و راهنما)
 FINAL_IMAGE_URL = "https://uploadkon.ir/uploads/96a601_25photo18968523702.jpg"
 
-# ==== توابع کمکی ====
-
 def send_message(chat_id, text, reply_to_message_id=None, parse_mode='Markdown'):
-    # فقط پیام متنی ارسال کن
     return bot.send_message(chat_id, text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
 
 def send_message_with_image(chat_id, text, reply_to_message_id=None, parse_mode='Markdown'):
-    # ارسال متن + عکس (برای استارت و راهنما)
-    msg = bot.send_photo(chat_id, FINAL_IMAGE_URL, caption=text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
-    return msg
+    return bot.send_photo(chat_id, FINAL_IMAGE_URL, caption=text, reply_to_message_id=reply_to_message_id, parse_mode=parse_mode)
 
 def send_reply_with_image(message, text, parse_mode='Markdown'):
     return send_message_with_image(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=parse_mode)
@@ -59,14 +51,12 @@ def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
         return user_id in custom_admins or any(admin.user.id == user_id for admin in admins)
-    except Exception as e:
-        print("[ERROR] is_admin:", e)
+    except Exception:
         return False
 
 def mention_user(user):
     return f"[{user.first_name}](tg://user?id={user.id})"
 
-# ==== Webhook ====
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def receive_update():
     json_str = request.get_data().decode("utf-8")
@@ -78,7 +68,6 @@ def receive_update():
 def index():
     return "ربات فعال است ✅"
 
-# ==== پیام خصوصی ====
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
@@ -89,7 +78,6 @@ def start_handler(message: Message):
         )
         send_reply_with_image(message, text)
 
-# ==== خوش‌آمدگویی ====
 @bot.message_handler(content_types=['new_chat_members'])
 def welcome(message: Message):
     for member in message.new_chat_members:
@@ -104,10 +92,9 @@ def welcome(message: Message):
                 )
             else:
                 send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(member)}!", parse_mode='Markdown')
-        except Exception as e:
-            print("[ERROR] welcome:", e)
+        except Exception:
+            pass
 
-# ==== پیام‌های گروه ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
 def handle_group_message(message: Message):
     user_id = message.from_user.id
@@ -118,34 +105,27 @@ def handle_group_message(message: Message):
     stats = group_stats.setdefault(chat_id, {'messages': 0, 'users': {}})
     stats['messages'] += 1
     stats['users'][user_id] = stats['users'].get(user_id, 0) + 1
-
     group_users.setdefault(chat_id, set()).add(user_id)
 
-    # فیلتر کلمات ممنوع
     if any(w in lower for w in FILTERED_WORDS):
         try:
             bot.delete_message(chat_id, message.message_id)
             send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی‌ادبی نکن!", parse_mode='Markdown')
-        except Exception as e:
-            print("[ERROR] filter:", e)
+        except:
+            pass
         return
 
-    # فقط ادمین‌ها مجاز به دستورات زیر هستند
     if not is_admin(chat_id, user_id):
         return
 
     if lower.startswith("ارسال"):
         msg = text[5:].strip()
-        if not msg:
-            send_reply(message, "❗ لطفاً متنی بنویس.")
-            return
         success, fail = 0, 0
         for uid in group_users[chat_id]:
             try:
                 bot.send_message(uid, f"""👑 پیام از {message.chat.title}:\n\n{msg}""")
-                # ارسال عکس حذف شد
                 success += 1
-            except Exception:
+            except:
                 fail += 1
         send_reply(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
 
@@ -181,7 +161,7 @@ def handle_group_message(message: Message):
         try:
             parts = lower.split()
             if len(parts) < 3:
-                send_reply(message, "❗ استفاده صحیح: خفه موقت [ثانیه] (ریپلی روی پیام)")
+                send_reply(message, "❗ استفاده صحیح: خفه موقت [ثانیه]")
                 return
             duration = int(parts[2])
             until = datetime.utcnow() + timedelta(seconds=duration)
@@ -198,9 +178,6 @@ def handle_group_message(message: Message):
     elif lower.startswith("پاکسازی"):
         try:
             parts = lower.split()
-            if len(parts) < 2 or not parts[1].isdigit():
-                send_reply(message, "❗ استفاده صحیح: پاکسازی [تعداد]")
-                return
             count = int(parts[1])
             for i in range(count):
                 try:
@@ -251,7 +228,6 @@ def handle_group_message(message: Message):
             return
         reply = (
             "📊 *آمار گروه:*\n\n"
-
             f"📝 تعداد کل پیام‌ها: *{s['messages']}*\n\n"
             "👥 *برترین ارسال‌کنندگان پیام:* \n"
         )
@@ -259,10 +235,9 @@ def handle_group_message(message: Message):
             try:
                 user = bot.get_chat_member(chat_id, uid).user
                 user_mention = f"[{user.first_name}](tg://user?id={user.id})"
-            except Exception:
+            except:
                 user_mention = f"`{uid}`"
             reply += f"➤ {user_mention} — {count} پیام\n"
-
         send_reply(message, reply)
 
     elif lower == "راهنما":
@@ -287,7 +262,6 @@ def handle_group_message(message: Message):
         """
         send_reply_with_image(message, help_text.strip())
 
-# ==== اجرای ربات ====
 if __name__ == '__main__':
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
