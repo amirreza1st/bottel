@@ -12,6 +12,8 @@ if TELEGRAM_BOT_TOKEN is None or WEBHOOK_URL is None:
     raise Exception("توکن یا Webhook URL مشخص نشده!")
 
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
+app = Flask(__name__)
+
 ALLOWED_CHAT_ID = -1002648418605
 ADMIN_PASSWORD = "1494"
 custom_admins = set()
@@ -21,12 +23,11 @@ JOKES = [
     "😆 چرا برنامه‌نویس‌ها از طبیعت خوششون نمیاد؟ چون باگ زیاده!"
 ]
 
-# ==== Flask app ====
-app = Flask(__name__)
-
+# ==== Webhook ====
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def receive_update():
-    update = types.Update.de_json(request.stream.read().decode("utf-8"))
+    json_str = request.get_data().decode("utf-8")
+    update = types.Update.de_json(json_str)
     bot.process_new_updates([update])
     return "OK", 200
 
@@ -34,7 +35,7 @@ def receive_update():
 def root():
     return "ربات فعال است ✅"
 
-# ==== توابع و هندلرها ====
+# ==== توابع کمکی ====
 def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
@@ -42,61 +43,60 @@ def is_admin(chat_id, user_id):
     except:
         return False
 
+# ==== هندلرها ====
+
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
         bot.reply_to(message, "Welcome To Moscow 🌙\nDeveloper : @rewhi 👑")
 
 @bot.message_handler(content_types=['new_chat_members'])
-def welcome_new_members(message):
+def welcome_new_members(message: Message):
     for new_member in message.new_chat_members:
         bot.send_message(message.chat.id, f"🎉 {new_member.first_name} خوش آمدی!")
 
-@bot.message_handler(func=lambda m: True)
+@bot.message_handler(func=lambda m: m.chat.id == ALLOWED_CHAT_ID and m.text)
 def filter_messages(message: Message):
-    if message.chat.id != ALLOWED_CHAT_ID or not message.text:
-        return
     for word in FILTERED_WORDS:
         if word in message.text.lower():
-            bot.delete_message(message.chat.id, message.message_id)
-            bot.send_message(message.chat.id, f"⚠️ {message.from_user.first_name} لطفاً از الفاظ مناسب استفاده کن.")
-            return
+            try:
+                bot.delete_message(message.chat.id, message.message_id)
+                bot.send_message(message.chat.id, f"⚠️ {message.from_user.first_name} لطفاً از الفاظ مناسب استفاده کن.")
+            except:
+                pass
+            return  # جلوگیری از ادامه پردازش
 
 @bot.message_handler(commands=['ban'])
 def ban_user(message: Message):
-    if message.chat.id == ALLOWED_CHAT_ID and is_admin(message.chat.id, message.from_user.id):
-        if message.reply_to_message:
-            bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, "✅ کاربر بن شد.")
+    if message.reply_to_message and is_admin(message.chat.id, message.from_user.id):
+        bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+        bot.reply_to(message, "✅ کاربر بن شد.")
 
 @bot.message_handler(commands=['unban'])
 def unban_user(message: Message):
-    if message.chat.id == ALLOWED_CHAT_ID and is_admin(message.chat.id, message.from_user.id):
-        if message.reply_to_message:
-            bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, "✅ کاربر آزاد شد.")
+    if message.reply_to_message and is_admin(message.chat.id, message.from_user.id):
+        bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
+        bot.reply_to(message, "✅ کاربر آزاد شد.")
 
 @bot.message_handler(commands=['mute'])
 def mute_user(message: Message):
-    if message.chat.id == ALLOWED_CHAT_ID and is_admin(message.chat.id, message.from_user.id):
-        if message.reply_to_message:
-            bot.restrict_chat_member(
-                message.chat.id,
-                message.reply_to_message.from_user.id,
-                permissions=types.ChatPermissions(can_send_messages=False)
-            )
-            bot.reply_to(message, "🔇 کاربر ساکت شد.")
+    if message.reply_to_message and is_admin(message.chat.id, message.from_user.id):
+        bot.restrict_chat_member(
+            message.chat.id,
+            message.reply_to_message.from_user.id,
+            permissions=types.ChatPermissions(can_send_messages=False)
+        )
+        bot.reply_to(message, "🔇 کاربر ساکت شد.")
 
 @bot.message_handler(commands=['unmute'])
 def unmute_user(message: Message):
-    if message.chat.id == ALLOWED_CHAT_ID and is_admin(message.chat.id, message.from_user.id):
-        if message.reply_to_message:
-            bot.restrict_chat_member(
-                message.chat.id,
-                message.reply_to_message.from_user.id,
-                permissions=types.ChatPermissions(can_send_messages=True)
-            )
-            bot.reply_to(message, "🔊 کاربر آزاد شد.")
+    if message.reply_to_message and is_admin(message.chat.id, message.from_user.id):
+        bot.restrict_chat_member(
+            message.chat.id,
+            message.reply_to_message.from_user.id,
+            permissions=types.ChatPermissions(can_send_messages=True)
+        )
+        bot.reply_to(message, "🔊 کاربر آزاد شد.")
 
 @bot.message_handler(commands=['lock'])
 def lock_group(message: Message):
@@ -147,18 +147,11 @@ def help_handler(message: Message):
 """
     bot.reply_to(message, help_text)
 
-
-@bot.message_handler(func=lambda m: True)
-def echo_test(message):
-    bot.reply_to(message, "پیام دریافت شد!")
-
-
-
 @bot.message_handler(commands=['joke'])
 def joke_handler(message: Message):
     bot.reply_to(message, random.choice(JOKES))
 
-# ==== شروع برنامه ====
+# ==== اجرای برنامه ====
 if __name__ == "__main__":
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
