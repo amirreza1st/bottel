@@ -25,13 +25,13 @@ lock_settings = {
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == "private":
-        bot.send_message(message.chat.id, "سلام! به ربات خوش آمدید. هر سوالی داشتید بپرسید!")
+        bot.send_message(message.chat.id, "WELCOME To Moscow , Developer : @rewhi")
 
 # ---------------- پیام خوش‌آمدگویی کاربر جدید ----------------
 @bot.message_handler(content_types=['new_chat_members'])
 def welcome_new_member(message: Message):
     for new_user in message.new_chat_members:
-        bot.send_message(message.chat.id, f"سلام {new_user.first_name} خوش آمدی به گروه!")
+        bot.send_message(message.chat.id, f"سلام {new_user.first_name} خوش آمدی به گروه عزیزم")
 
 # ---------------- فیلتر کلمات ----------------
 @bot.message_handler(func=lambda m: True, content_types=['text'])
