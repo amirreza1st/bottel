@@ -1,6 +1,7 @@
 import os
 import random
 from datetime import datetime, timedelta
+import requests
 from flask import Flask, request
 from telebot import TeleBot, types
 from telebot.types import Message
@@ -9,307 +10,219 @@ from telebot.types import Message
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-if TELEGRAM_BOT_TOKEN is None or WEBHOOK_URL is None:
+if not TELEGRAM_BOT_TOKEN or not WEBHOOK_URL:
     raise Exception("توکن یا Webhook URL مشخص نشده!")
 
 bot = TeleBot(TELEGRAM_BOT_TOKEN)
 app = Flask(__name__)
 
+# ==== داده‌ها و پیکربندی ====
 ADMIN_PASSWORD = "1111"
 custom_admins = set()
-FILTERED_WORDS = ["کص", "کوص", "ننت", "مادرت", "مامانت", "ننه", "جنده", "کونده", "کصده", "خارت", "خواهرتو", "کوس", "ابجیتو", "کونتو", "لینک"]
+FILTERED_WORDS = [
+    "کص", "کوص", "ننت", "مادرت", "مامانت", "ننه", "جنده",
+    "کونده", "کصده", "خارت", "خواهرتو", "کوس", "ابجیتو",
+    "کونتو", "لینک"
+]
+
 JOKES = [
     "🤣 چرا کامپیوتر هیچ‌وقت گرسنه نیست؟ چون همیشه RAM داره!",
     "😆 چرا برنامه‌نویس‌ها از طبیعت خوششون نمیاد؟ چون باگ زیاده!",
-    """‏به یکی گفتم: چقد خوشگلی!!
-
-گفت: چشات قشنگ میبینه.
-
-دو تا عکس که رفتم جلوتر دیدم راست میگفته بنده‌خدا""",
-    """حیف نون ﺑﺎﺑﺎﺵ ﻣﯿﻤﯿﺮﻩ
-
-ﺳﻮﻣﺶ ﺧﯿﻠﯽ ﺷﻠﻮﻍ ﻣﯿﺸﻪ، 
-
-😆 ﺑﻪ ﺩﺍﺩﺍﺷﺶ ﻣﯿﮕﻪ ﺍﮔﻪ ﻫﻔﺘﻢ ﻫﻢ ﺍﯾﻨﻘﺪ ﺷﻠﻮﻍ ﺷﺪ ﺑﻼﻝ ﺑﯿﺎﺭﯾﻢ ﺑﻔﺮﻭﺷﯿﻢ""",
-    """حیوون خوونگی فقط مورچه!!
-
-سر و صدا نمیکنه ،جیش نمی کنه، رسیدگی نمیخواد
-
-آروم خونه رو جارو میکنه
-
-گشنه هم بشه یه چیزی از رو فرش پیدا میکنه می خوره """
+    "‏به یکی گفتم: چقد خوشگلی!! گفت: چشات قشنگ میبینه. دو تا عکس که رفتم جلوتر دیدم راست میگفته بنده‌خدا",
+    "حیف نون ﺑﺎﺑﺎﺵ ﻣﯿﻤﯿﺮﻩ، ﺳﻮﻣﺶ ﺧﯿﻠﯽ ﺷﻠﻮﻍ ﻣﯿﺸﻪ، به ﺩﺍﺩﺍﺷﺶ ﻣﯿﮕﻪ ﺍﮔﻪ ﻫﻔﺘﻢ ﻫﻢ ﺍﯾﻨﻘﺪ ﺷﻠﻮﻍ ﺷﺪ ﺑﻼﻝ ﺑﯿﺎﺭﯾﻢ ﺑﻔﺮﻭﺷﯿﻢ",
+    "حیوون خوونگی فقط مورچه!! سر و صدا نمیکنه، جیش نمی‌کنه، رسیدگی نمی‌خواد، آروم خونه رو جارو می‌کنه، گشنه هم بشه یه چیزی از رو فرش پیدا می‌کنه می‌خوره"
 ]
 
-# دیکشنری ذخیره اعضای هر گروه (کلید: chat_id، مقدار: set از user_id ها)
-group_users = {}
+group_users = {}  # {chat_id: set(user_id)}
+group_stats = {}  # {chat_id: {'messages': int, 'users': {user_id: count}}}
 
 # ==== Webhook ====
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def receive_update():
-    json_str = request.get_data().decode("utf-8")
-    update = types.Update.de_json(json_str)
+    update = types.Update.de_json(request.get_data().decode("utf-8"))
     bot.process_new_updates([update])
     return "OK", 200
 
-@app.route("/", methods=["GET"])
-def root():
+@app.route("/")
+def index():
     return "ربات فعال است ✅"
 
 # ==== توابع کمکی ====
-
 def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
-        return any(admin.user.id == user_id for admin in admins) or user_id in custom_admins
-    except Exception:
+        return user_id in custom_admins or any(admin.user.id == user_id for admin in admins)
+    except:
         return False
 
 def mention_user(user):
-    # قالب منشن با MarkdownV2
     return f"[{user.first_name}](tg://user?id={user.id})"
 
-# ==== هندلر دستور /start (فقط چت خصوصی) ====
+# ==== پیام خصوصی ==== 
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
         bot.reply_to(message, "Welcome To Moscow 🌙\nDeveloper : @rewhi 👑")
 
-# ==== خوش‌آمدگویی با عکس پروفایل ====
+# ==== خوش‌آمدگویی ====
 @bot.message_handler(content_types=['new_chat_members'])
-def welcome_new_members(message: Message):
-    for new_member in message.new_chat_members:
+def welcome(message: Message):
+    for member in message.new_chat_members:
         try:
-            photos = bot.get_user_profile_photos(new_member.id, limit=1)
+            photos = bot.get_user_profile_photos(member.id, limit=1)
             if photos.total_count > 0:
-                file_id = photos.photos[0][0].file_id
-                bot.send_photo(
-                    message.chat.id,
-                    photo=file_id,
-                    caption=f"🤤 ممبر جدید {mention_user(new_member)}!",
-                    parse_mode='Markdown'
-                )
+                bot.send_photo(message.chat.id, photos.photos[0][0].file_id, caption=f"🤤 ممبر جدید {mention_user(member)}!", parse_mode='Markdown')
             else:
-                bot.send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(new_member)}!", parse_mode='Markdown')
+                bot.send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(member)}!", parse_mode='Markdown')
         except Exception as e:
-            print(f"[ERROR] welcome_new_members: {e}")
-            bot.send_message(message.chat.id, f"🤤 ممبر جدید {mention_user(new_member)}!", parse_mode='Markdown')
+            print("[ERROR] welcome:", e)
 
-# ==== هندلر پیام‌های گروه: فیلتر کلمات، دستورها، و ارسال پیام خصوصی ====
+# ==== پیام‌های گروه ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
-def group_message_handler(message: Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    text = message.text.strip()
+def handle_group_message(message: Message):
+    user_id, chat_id, text = message.from_user.id, message.chat.id, message.text.strip()
 
-    print(f"[DEBUG] پیام گروهی از {user_id}: {text}")
+    # آمار
+    stats = group_stats.setdefault(chat_id, {'messages': 0, 'users': {}})
+    stats['messages'] += 1
+    stats['users'][user_id] = stats['users'].get(user_id, 0) + 1
 
-    # ثبت عضو در دیکشنری
-    users = group_users.setdefault(chat_id, set())
-    users.add(user_id)
+    # ثبت کاربر
+    group_users.setdefault(chat_id, set()).add(user_id)
 
     # فیلتر کلمات ممنوع
-    for word in FILTERED_WORDS:
-        if word in text.lower():
-            try:
-                bot.delete_message(chat_id, message.message_id)
-                bot.send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی ادبی نکن گوساله.", parse_mode='Markdown')
-            except Exception:
-                pass
-            return
-
-    # فقط ادمین‌ها اجازه اجرای دستور را دارند (بجز مواردی که نیاز به ادمین نیست)
-    # دستور ارسال پیام خصوصی به اعضا
-    if text.lower().startswith("ارسال"):
-        if not is_admin(chat_id, user_id):
-            return
-        text_to_send = text[5:].strip()
-        if not text_to_send:
-            bot.reply_to(message, "❗ لطفاً متنی برای ارسال خصوصی وارد کنید.")
-            return
-        sent_count = 0
-        failed_count = 0
-        for uid in users:
-            try:
-                user_mention = f"[کاربر](tg://user?id={uid})"
-                bot.send_message(uid, f"پیام از گروه {message.chat.title}:\n\n{text_to_send}\n\n{user_mention}", parse_mode='Markdown')
-                sent_count += 1
-            except Exception:
-                failed_count += 1
-        bot.reply_to(message, f"✅ پیام به {sent_count} نفر ارسال شد.\n❌ ارسال به {failed_count} نفر موفق نبود.")
+    if any(w in text.lower() for w in FILTERED_WORDS):
+        try:
+            bot.delete_message(chat_id, message.message_id)
+            bot.send_message(chat_id, f"⚠️ {mention_user(message.from_user)} بی‌ادبی نکن!", parse_mode='Markdown')
+        except:
+            pass
         return
 
-    # دستورهای ادمین که ریپلای لازم دارند
+    # دستورها
     if not is_admin(chat_id, user_id):
         return
 
-    lower_text = text.lower()
+    lower = text.lower()
 
-    if lower_text.startswith("سیک") and message.reply_to_message:
+    if lower.startswith("ارسال"):
+        msg = text[5:].strip()
+        if not msg:
+            bot.reply_to(message, "❗ لطفاً متنی بنویس.")
+            return
+        success, fail = 0, 0
+        for uid in group_users[chat_id]:
+            try:
+                bot.send_message(uid, f"📩 پیام از {message.chat.title}:
+
+{msg}", parse_mode='Markdown')
+                success += 1
+            except:
+                fail += 1
+        bot.reply_to(message, f"✅ ارسال: {success}\n❌ شکست: {fail}")
+
+    elif lower.startswith("سیک") and message.reply_to_message:
         try:
             bot.ban_chat_member(chat_id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} سیک کاربر رو زدم.", parse_mode='Markdown')
+            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} بن شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif lower_text.startswith("حذف سیک") and message.reply_to_message:
+    elif lower.startswith("حذف سیک") and message.reply_to_message:
         try:
             bot.unban_chat_member(chat_id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} آزاد شد.", parse_mode='Markdown')
+            bot.reply_to(message, f"✅ آزاد شد.")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif lower_text.startswith("خفه") and message.reply_to_message:
+    elif lower.startswith("خفه") and message.reply_to_message:
         try:
-            bot.restrict_chat_member(
-                chat_id,
-                message.reply_to_message.from_user.id,
-                permissions=types.ChatPermissions(can_send_messages=False)
-            )
-            bot.reply_to(message, f"🔇 {mention_user(message.reply_to_message.from_user)} کاربر خفه شد.", parse_mode='Markdown')
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=False))
+            bot.reply_to(message, f"🔇 خفه شد.")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif lower_text.startswith("حذف خفه") and message.reply_to_message:
+    elif lower.startswith("حذف خفه") and message.reply_to_message:
         try:
-            bot.restrict_chat_member(
-                chat_id,
-                message.reply_to_message.from_user.id,
-                permissions=types.ChatPermissions(can_send_messages=True)
-            )
-            bot.reply_to(message, f"🔊 {mention_user(message.reply_to_message.from_user)} ازاد شد.", parse_mode='Markdown')
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, types.ChatPermissions(can_send_messages=True))
+            bot.reply_to(message, f"🔊 آزاد شد.")
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif lower_text.startswith("خفه موقت") and message.reply_to_message:
-        parts = lower_text.split()
-        if len(parts) == 2 and parts[1].isdigit():
-            try:
-                duration = int(parts[1])
-                until = datetime.utcnow() + timedelta(seconds=duration)
-                bot.restrict_chat_member(
-                    chat_id,
-                    message.reply_to_message.from_user.id,
-                    until_date=until,
-                    permissions=types.ChatPermissions(can_send_messages=False)
-                )
-                bot.reply_to(message, f"⏱️ {mention_user(message.reply_to_message.from_user)} به مدت {duration} ثانیه خفه شد.", parse_mode='Markdown')
-            except Exception as e:
-                bot.reply_to(message, f"❌ خطا: {e}")
-        else:
-            bot.reply_to(message, "❗ استفاده صحیح: tempmute [ثانیه] (با ریپلای)")
+    elif lower.startswith("خفه موقت") and message.reply_to_message:
+        try:
+            duration = int(lower.split()[1])
+            until = datetime.utcnow() + timedelta(seconds=duration)
+            bot.restrict_chat_member(chat_id, message.reply_to_message.from_user.id, until_date=until, permissions=types.ChatPermissions(can_send_messages=False))
+            bot.reply_to(message, f"⏱️ خفه موقت شد ({duration} ثانیه)")
+        except Exception as e:
+            bot.reply_to(message, f"❌ خطا: {e}")
 
-    elif lower_text.startswith("پاکسازی") and message.reply_to_message:
-        parts = lower_text.split()
-        if len(parts) == 2 and parts[1].isdigit():
-            count = int(parts[1])
-            deleted = 0
+    elif lower.startswith("پاکسازی") and message.reply_to_message:
+        try:
+            count = int(lower.split()[1])
             for i in range(count):
-                try:
-                    bot.delete_message(chat_id, message.reply_to_message.message_id + i)
-                    deleted += 1
-                except Exception:
-                    pass
-            bot.reply_to(message, f"🗑️ {deleted} پیام حذف شد.")
-        else:
-            bot.reply_to(message, "❗ استفاده صحیح: del [تعداد] (با ریپلای)")
+                bot.delete_message(chat_id, message.reply_to_message.message_id + i)
+            bot.reply_to(message, f"🗑️ {count} پیام حذف شد.")
+        except:
+            bot.reply_to(message, "❗ استفاده صحیح: پاکسازی [تعداد]")
 
-    elif lower_text == "قفل":
-        try:
-            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
-            bot.reply_to(message, "🔒 گروه قفل شد.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ خطا: {e}")
+    elif lower == "قفل":
+        bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=False))
+        bot.reply_to(message, "🔒 گروه قفل شد.")
 
-    elif lower_text == "باز کردن":
-        try:
-            bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
-            bot.reply_to(message, "🔓 گروه باز شد.")
-        except Exception as e:
-            bot.reply_to(message, f"❌ خطا: {e}")
+    elif lower == "باز کردن":
+        bot.set_chat_permissions(chat_id, types.ChatPermissions(can_send_messages=True))
+        bot.reply_to(message, "🔓 گروه باز شد.")
 
-    elif lower_text.startswith("افزودن ادمین"):
-        parts = lower_text.split()
-        if len(parts) == 2 and parts[1] == ADMIN_PASSWORD:
+    elif lower.startswith("افزودن ادمین"):
+        if lower.split()[-1] == ADMIN_PASSWORD:
             custom_admins.add(user_id)
-            bot.reply_to(message, "🥰 شما به عنوان ادمین ثبت شدید.")
+            bot.reply_to(message, "👮 ادمین شدی.")
         else:
             bot.reply_to(message, "❌ رمز نادرست است.")
 
-    elif lower_text == "ادمین ها":
+    elif lower == "ادمین ها":
         try:
             admins = bot.get_chat_administrators(chat_id)
-            names = [f"👮 {mention_user(admin.user)}" for admin in admins]
-            bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names), parse_mode='Markdown')
-        except Exception as e:
-            bot.reply_to(message, f"❌ خطا: {e}")
+            reply = "\n".join([f"👮 {mention_user(a.user)}" for a in admins])
+            bot.reply_to(message, reply, parse_mode='Markdown')
+        except:
+            pass
 
-    elif lower_text == "جوک":
+    elif lower == "جوک":
         bot.reply_to(message, random.choice(JOKES))
 
-    if lower_text == "آمار":
-        stats = group_stats.get(chat_id)
-        if not stats:
-            bot.reply_to(message, "📊 هنوز آماری برای این گروه ثبت نشده است.")
+    elif lower == "آمار":
+        s = group_stats.get(chat_id)
+        if not s:
+            bot.reply_to(message, "📊 آماری موجود نیست.")
             return
-        total_messages = stats["messages"]
-        top_users = sorted(stats["users"].items(), key=lambda x: x[1], reverse=True)[:5]
-        report = f"📊 **آمار فعالیت امروز گروه:**\n\n🔢 کل پیام‌ها: {total_messages}\n👥 فعال‌ترین کاربران:\n"
-        for user_id, count in top_users:
-            report += f"- [{user_id}](tg://user?id={user_id}): {count} پیام\n"
-        bot.reply_to(message, report, parse_mode='Markdown')
-        return
+        reply = f"📊 آمار گروه:\n🔢 پیام‌ها: {s['messages']}\n"
+        for uid, count in sorted(s['users'].items(), key=lambda x: x[1], reverse=True)[:5]:
+            reply += f"- [{uid}](tg://user?id={uid}): {count} پیام\n"
+        bot.reply_to(message, reply, parse_mode='Markdown')
 
-    if lower_text == "نرخ ارز":
-        try:
-            # نرخ ارز
-            exchange_data = requests.get("https://api.exchangerate-api.com/v4/latest/USD").json()
-            eur = exchange_data["rates"].get("EUR")
-            gbp = exchange_data["rates"].get("GBP")
-
-            # بیت‌کوین به تومان
-            btc_data = requests.get("https://api.coindesk.com/v1/bpi/currentprice/IRR.json").json()
-            btc_price = btc_data["bpi"]["IRR"]["rate"].replace(",", "")
-            btc_price = f"{int(float(btc_price)):,}"
-
-            # قیمت طلا (گرم ۱۸ عیار)
-            gold_data = requests.get("https://api.nobitex.ir/market/stats").json()
-            gold_price = gold_data["stats"]["gold18"]["last"]
-            gold_price = f"{int(float(gold_price)):,}"
-
-            report = (
-                "**📊 نرخ لحظه‌ای بازار:**\n\n"
-                "💵 **دلار آمریکا:** `1 USD`\n"
-                f"🇪🇺 **یورو:** `{eur:.2f} EUR`\n"
-                f"🇬🇧 **پوند:** `{gbp:.2f} GBP`\n\n"
-                f"🟡 **طلای ۱۸ عیار:** `{gold_price} تومان`\n"
-                f"🪙 **بیت‌کوین:** `{btc_price} تومان`\n"
-            )
-            bot.reply_to(message, report, parse_mode="Markdown")
-        except Exception as e:
-            print("❌ خطا در دریافت اطلاعات:", e)
-            bot.reply_to(message, "❌ خطا در دریافت اطلاعات بازار.")
-        return
-
-    elif lower_text == "راهنما":
+    elif lower == "راهنما":
         bot.reply_to(message, """
 📖 راهنمای ربات:
 
-🔨 **سیک** (با ریپلای) - بن کاربر  
-🔓 **حذف سیک** - آزاد کردن  
-🔇 **خفه** - سکوت دائمی  
-⏱️ **خفه موقت** [ثانیه] - سکوت موقت  
-🔊 **حذف خفه** - لغو سکوت  
-🗑️ **پاکسازی** [تعداد] - حذف پیام‌ها  
-🔒 **قفل** - قفل گروه  
-🔓 **باز کردن** - باز کردن  
-🎭 **افزودن ادمین** [رمز] - افزودن ادمین  
-📋 **ادمین ها** - لیست ادمین‌ها  
-🤣 **جوک** - جوک  
-📌 **راهنما** - نمایش راهنما
-""", parse_mode='Markdown')
+🔨 سیک (ریپلای) - بن
+🔓 حذف سیک - آزادسازی
+🔇 خفه - سکوت دائم
+⏱️ خفه موقت [ثانیه] - سکوت موقت
+🔊 حذف خفه - لغو سکوت
+🗑️ پاکسازی [تعداد] - حذف پیام‌ها
+🔒 قفل - قفل گروه
+🔓 باز کردن - باز کردن گروه
+🎭 افزودن ادمین [رمز] - اضافه کردن ادمین
+📋 ادمین ها - لیست مدیران
+🤣 جوک - ارسال جوک
+📌 راهنما - نمایش راهنما
+        """, parse_mode='Markdown')
 
-# ==== اجرای برنامه ====
-if __name__ == "__main__":
+# ==== اجرای ربات ====
+if __name__ == '__main__':
     bot.remove_webhook()
     bot.set_webhook(url=f"{WEBHOOK_URL}/{TELEGRAM_BOT_TOKEN}")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
