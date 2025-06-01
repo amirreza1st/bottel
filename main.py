@@ -281,8 +281,7 @@ def handle_group(message: Message):
         except (IndexError, ValueError):
             send_reply(message, "❗ لطفاً تعداد پیام‌های مورد نظر را به صورت عدد وارد کنید، مثلاً:\n`پاکسازی 5`")
 
-# قفل گروه (غیر فعال کردن ارسال پیام برای اعضا)
-elif lower == "قفل":
+if lower == "قفل":
     try:
         bot.set_chat_permissions(chat_id, permissions=types.ChatPermissions(
             can_send_messages=False,
@@ -293,6 +292,7 @@ elif lower == "قفل":
         send_reply(message, "🔐 گروه قفل شد. ارسال پیام برای اعضا غیرفعال شد.")
     except Exception as e:
         send_reply(message, f"❗ خطا در قفل کردن گروه: {e}")
+
 
 
     # باز کردن گروه (فعال کردن ارسال پیام برای اعضا)
