@@ -7,7 +7,7 @@ from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-ADMIN_PASSWORD = "1111"
+ADMIN_PASSWORD = "111166"
 
 if not TELEGRAM_BOT_TOKEN or not WEBHOOK_URL:
     raise Exception("توکن یا Webhook URL مشخص نشده!")
@@ -90,8 +90,6 @@ def callback_help(call):
 📊 امار - نمایش آمار
 📩 گزارش - ارسال گزارش با ریپلی
 📥 بررسی گزارش‌ها (فقط ادمین)
-➕ newcommand [دستور] = [پاسخ]
-➖ deletecommand [دستور]
     """
     bot.send_message(call.message.chat.id, help_text.strip(), parse_mode='Markdown')
 
