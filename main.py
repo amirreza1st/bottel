@@ -265,10 +265,18 @@ def handle_group(message: Message):
         except Exception:
             send_reply(message, "❗ لطفاً فرمت را به شکل زیر وارد کنید:\n`خفه موقت [ثانیه]`")
 
-    # حذف تعداد مشخصی پیام از گروه
-    elif lower.startswith("پاکسازی"):
-        try:
-            count = int(lower.split()[1])
-            for i in range(count):
+# حذف تعداد مشخصی پیام از گروه
+elif lower.startswith("پاکسازی"):
+    try:
+        count = int(lower.split()[1])
+        deleted = 0
+        for i in range(count):
+            try:
                 bot.delete_message(chat_id, message.message_id - i)
-            send_reply(message, f"🗑️ تعداد {count} پیام با موفقیت
+                deleted += 1
+            except Exception:
+                # اگر حذف پیام ممکن نبود، ادامه بده
+                pass
+        send_reply(message, f"🗑️ تعداد {deleted} پیام با موفقیت حذف شد.")
+    except (IndexError, ValueError):
+        send_reply(message, "❗ لطفاً تعداد پیام‌های مورد نظر را به صورت عدد وارد کنید، مثلاً:\n`پاکسازی 5`")
