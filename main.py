@@ -36,6 +36,7 @@ def root():
     return "ربات فعال است ✅"
 
 # ==== توابع کمکی ====
+
 def is_admin(chat_id, user_id):
     try:
         admins = bot.get_chat_administrators(chat_id)
@@ -43,67 +44,91 @@ def is_admin(chat_id, user_id):
     except Exception:
         return False
 
+def mention_user(user):
+    # قالب منشن با MarkdownV2
+    return f"[{user.first_name}](tg://user?id={user.id})"
+
 # ==== هندلر دستور /start (فقط چت خصوصی) ====
 @bot.message_handler(commands=['start'])
 def start_handler(message: Message):
     if message.chat.type == 'private':
         bot.reply_to(message, "Welcome To Moscow 🌙\nDeveloper : @rewhi 👑")
 
-# ==== خوش‌آمدگویی به اعضای جدید ====
+# ==== خوش‌آمدگویی با عکس پروفایل ====
 @bot.message_handler(content_types=['new_chat_members'])
 def welcome_new_members(message: Message):
     for new_member in message.new_chat_members:
-        bot.send_message(message.chat.id, f"🎉 {new_member.first_name} خوش آمدی!")
+        try:
+            # گرفتن عکس پروفایل (حداقل سایز 1)
+            photos = bot.get_user_profile_photos(new_member.id, limit=1)
+            if photos.total_count > 0:
+                file_id = photos.photos[0][0].file_id
+                bot.send_photo(
+                    message.chat.id,
+                    photo=file_id,
+                    caption=f"🎉 خوش آمدی {mention_user(new_member)}!",
+                    parse_mode='Markdown'
+                )
+            else:
+                bot.send_message(message.chat.id, f"🎉 خوش آمدی {mention_user(new_member)}!", parse_mode='Markdown')
+        except Exception as e:
+            print(f"[ERROR] welcome_new_members: {e}")
+            bot.send_message(message.chat.id, f"🎉 خوش آمدی {mention_user(new_member)}!", parse_mode='Markdown')
 
-# ==== فیلتر کلمات ممنوع در گروه‌ها ====
+# ==== هندلر پیام‌های گروه: فیلتر کلمات و دستورها ====
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
-def filter_messages(message: Message):
+def group_message_handler(message: Message):
+    print(f"[DEBUG] پیام گروهی از {message.from_user.id}: {message.text}")
+
+    # فیلتر کلمات ممنوع
     for word in FILTERED_WORDS:
         if word in message.text.lower():
             try:
                 bot.delete_message(message.chat.id, message.message_id)
-                bot.send_message(message.chat.id, f"⚠️ {message.from_user.first_name} لطفاً از الفاظ مناسب استفاده کن.")
+                bot.send_message(message.chat.id, f"⚠️ {mention_user(message.from_user)} لطفاً از الفاظ مناسب استفاده کن.", parse_mode='Markdown')
             except Exception:
                 pass
             return
 
-# ==== هندلر دستورات مدیریتی در گروه (بدون نیاز به اسلش /) ====
-@bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'] and m.text)
-def command_handler(message: Message):
-    # فقط ادمین‌ها و مدیران می‌توانند دستور اجرا کنند
+    # فقط ادمین‌ها اجازه اجرای دستور را دارند
     if not is_admin(message.chat.id, message.from_user.id):
         return
 
     text = message.text.strip().lower()
 
-    # فرمان‌ها:
     if text.startswith("ban") and message.reply_to_message:
         try:
             bot.ban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, "✅ کاربر بن شد.")
+            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} کاربر بن شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("unban") and message.reply_to_message:
         try:
             bot.unban_chat_member(message.chat.id, message.reply_to_message.from_user.id)
-            bot.reply_to(message, "✅ کاربر آزاد شد.")
+            bot.reply_to(message, f"✅ {mention_user(message.reply_to_message.from_user)} آزاد شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("mute") and message.reply_to_message:
         try:
-            bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                     permissions=types.ChatPermissions(can_send_messages=False))
-            bot.reply_to(message, "🔇 کاربر ساکت شد.")
+            bot.restrict_chat_member(
+                message.chat.id,
+                message.reply_to_message.from_user.id,
+                permissions=types.ChatPermissions(can_send_messages=False)
+            )
+            bot.reply_to(message, f"🔇 {mention_user(message.reply_to_message.from_user)} کاربر ساکت شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
     elif text.startswith("unmute") and message.reply_to_message:
         try:
-            bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                     permissions=types.ChatPermissions(can_send_messages=True))
-            bot.reply_to(message, "🔊 کاربر آزاد شد.")
+            bot.restrict_chat_member(
+                message.chat.id,
+                message.reply_to_message.from_user.id,
+                permissions=types.ChatPermissions(can_send_messages=True)
+            )
+            bot.reply_to(message, f"🔊 {mention_user(message.reply_to_message.from_user)} لغو سکوت شد.", parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
@@ -113,10 +138,13 @@ def command_handler(message: Message):
             try:
                 duration = int(parts[1])
                 until = datetime.utcnow() + timedelta(seconds=duration)
-                bot.restrict_chat_member(message.chat.id, message.reply_to_message.from_user.id,
-                                         until_date=until,
-                                         permissions=types.ChatPermissions(can_send_messages=False))
-                bot.reply_to(message, f"⏱️ کاربر به مدت {duration} ثانیه ساکت شد.")
+                bot.restrict_chat_member(
+                    message.chat.id,
+                    message.reply_to_message.from_user.id,
+                    until_date=until,
+                    permissions=types.ChatPermissions(can_send_messages=False)
+                )
+                bot.reply_to(message, f"⏱️ {mention_user(message.reply_to_message.from_user)} به مدت {duration} ثانیه ساکت شد.", parse_mode='Markdown')
             except Exception as e:
                 bot.reply_to(message, f"❌ خطا: {e}")
         else:
@@ -162,8 +190,8 @@ def command_handler(message: Message):
     elif text == "admins":
         try:
             admins = bot.get_chat_administrators(message.chat.id)
-            names = [f"👮 {admin.user.first_name}" for admin in admins]
-            bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names))
+            names = [f"👮 {mention_user(admin.user)}" for admin in admins]
+            bot.reply_to(message, "لیست مدیران:\n" + "\n".join(names), parse_mode='Markdown')
         except Exception as e:
             bot.reply_to(message, f"❌ خطا: {e}")
 
