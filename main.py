@@ -66,10 +66,10 @@ def start_handler(message: Message):
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("📚 راهنما", callback_data="help"))
         bot.send_photo(message.chat.id, FINAL_IMAGE_URL,
-            caption="🌙 *Welcome To Moscow Night* 🌙
+            caption="""🌙 *Welcome To Moscow Night* 🌙
 
 👑 Developer : @rewhi
-برای شروع از دکمه زیر استفاده کنید.",
+برای شروع از دکمه زیر استفاده کنید.""",
             reply_markup=kb, parse_mode='Markdown')
 
 @bot.callback_query_handler(func=lambda c: c.data == "help")
