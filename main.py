@@ -281,10 +281,121 @@ def handle_group(message: Message):
         except (IndexError, ValueError):
             send_reply(message, "❗ لطفاً تعداد پیام‌های مورد نظر را به صورت عدد وارد کنید، مثلاً:\n`پاکسازی 5`")
 
-    # قفل گروه (غیر فعال کردن ارسال پیام برای اعضا)
-    elif lower == "قفل":
+# قفل گروه (غیر فعال کردن ارسال پیام برای اعضا)
+elif lower == "قفل":
+    try:
+        bot.set_chat_permissions(chat_id, permissions=types.ChatPermissions(
+            can_send_messages=False,
+            can_send_media_messages=False,
+            can_send_other_messages=False,
+            can_add_web_page_previews=False
+        ))
+        send_reply(message, "🔐 گروه قفل شد. ارسال پیام برای اعضا غیرفعال شد.")
+    except Exception as e:
+        send_reply(message, f"❗ خطا در قفل کردن گروه: {e}")
+
+
+    # باز کردن گروه (فعال کردن ارسال پیام برای اعضا)
+    elif lower == "باز کردن":
         try:
-            bot.set_chat_permissions(chat_id, permissions=types.ChatPermissions(can_send_messages=False))
-            send_reply(message, "🔐 گروه قفل شد. ارسال پیام برای اعضا غیرفعال شد.")
+            bot.set_chat_permissions(chat_id, permissions=types.ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+            ))
+            send_reply(message, "🔓 گروه باز شد. اعضا می‌توانند پیام ارسال کنند.")
         except Exception:
-            send_reply(message, "
+            send_reply(message, "❗ خطا در باز کردن گروه.")
+
+    # نمایش آمار گروه
+    elif lower == "آمار":
+        stats = group_stats.get(chat_id, {'messages': 0, 'users': {}})
+        total_messages = stats['messages']
+        total_users = len(group_users.get(chat_id, []))
+        top_users = sorted(stats['users'].items(), key=lambda x: x[1], reverse=True)[:5]
+        msg = f"""📊 آمار گروه:
+تعداد کل پیام‌ها: {total_messages}
+تعداد اعضا: {total_users}
+پربازدیدترین اعضا:
+"""
+        for user_id, count in top_users:
+            try:
+                user = bot.get_chat_member(chat_id, user_id).user
+                msg += f"- {user.first_name}: {count} پیام\n"
+            except Exception:
+                continue
+        send_reply(message, msg)
+
+    # نمایش ادمین‌های گروه
+    elif lower == "ادمین‌ها":
+        try:
+            admins = bot.get_chat_administrators(chat_id)
+            text = "👑 ادمین‌های گروه:\n"
+            for admin in admins:
+                user = admin.user
+                text += f"- {mention_user(user)}\n"
+            for admin_id in custom_admins:
+                if admin_id not in [a.user.id for a in admins]:
+                    user = bot.get_chat_member(chat_id, admin_id).user
+                    text += f"- {mention_user(user)} (ادمین سفارشی)\n"
+            send_reply(message, text)
+        except Exception:
+            send_reply(message, "❗ خطا در دریافت لیست ادمین‌ها.")
+
+    # افزودن ادمین سفارشی به ربات با رمز عبور
+    elif lower.startswith("افزودن ادمین") and len(lower.split()) == 3:
+        parts = lower.split()
+        password = parts[2]
+        if password == ADMIN_PASSWORD:
+            custom_admins.add(user_id)
+            send_reply(message, "✅ شما به لیست ادمین‌های سفارشی افزوده شدید.")
+        else:
+            send_reply(message, "❌ رمز عبور نادرست است.")
+
+    # ارسال جوک
+    elif lower == "جوک":
+        joke = random.choice(JOKES)
+        send_reply(message, joke)
+
+    else:
+        # سایر پیام‌ها را بدون پاسخ رها کن
+        pass
+
+# هندلر دکمه‌های InlineKeyboard (بررسی گزارش‌ها)
+@bot.callback_query_handler(func=lambda call: call.data.startswith(("accept_", "reject_")))
+def callback_report_handler(call):
+    chat_id = call.message.chat.id
+    user_id = call.from_user.id
+
+    if not is_admin(chat_id, user_id):
+        bot.answer_callback_query(call.id, "❌ فقط ادمین‌ها مجاز به استفاده از این دکمه هستند.")
+        return
+
+    data = call.data
+    action, msg_id_str = data.split("_")
+    msg_id = int(msg_id_str)
+
+    if action == "accept":
+        try:
+            bot.delete_message(chat_id, msg_id)
+            bot.answer_callback_query(call.id, "✅ پیام حذف شد.")
+            bot.edit_message_text("✅ گزارش تایید و پیام حذف شد.", chat_id, call.message.message_id)
+        except Exception:
+            bot.answer_callback_query(call.id, "❗ خطا در حذف پیام.")
+    elif action == "reject":
+        bot.answer_callback_query(call.id, "❌ گزارش رد شد.")
+        bot.edit_message_text("❌ گزارش رد شد.", chat_id, call.message.message_id)
+
+# تنظیم وبهوک برای اجرای ربات روی سرور
+def set_webhook():
+    try:
+        bot.remove_webhook()
+        bot.set_webhook(url=WEBHOOK_URL + "/" + TELEGRAM_BOT_TOKEN)
+        print("Webhook تنظیم شد.")
+    except Exception as e:
+        print(f"خطا در تنظیم webhook: {e}")
+
+if __name__ == '__main__':
+    set_webhook()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
