@@ -1,5 +1,6 @@
 import os
 from telebot import TeleBot
+from telebot.types import Message
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
